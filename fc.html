@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Flip Card to Match</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background-color: #f0f0f0;
+            padding: 20px;
+        }
+        
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+        }
+        
+        .game-info {
+            margin-bottom: 20px;
+            font-size: 18px;
+            display: flex;
+            gap: 20px;
+        }
+        
+        .countdown {
+            font-weight: bold;
+            color: #e74c3c;
+        }
+        
+        .game-board {
+            display: grid;
+            grid-template-columns: repeat(3, 100px);
+            grid-gap: 10px;
+            margin-bottom: 20px;
+        }
+        
+        .card {
+            width: 100px;
+            height: 100px;
+            background-color: #3498db;
+            border-radius: 5px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 24px;
+            color: white;
+            cursor: pointer;
+            transition: transform 0.3s;
+            transform-style: preserve-3d;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .card.flipped {
+            transform: rotateY(180deg);
+        }
+        
+        .card.matched {
+            cursor: default;
+        }
+        
+        .card::before {
+            content: "";
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            background-image: url('image/Backstage.png');
+            background-size: cover;
+            background-position: center;
+            background-repeat: no-repeat;
+            backface-visibility: hidden;
+            border-radius: 5px;
+            transition: all 0.3s ease;
+        }
+        
+        .flipped::before {
+            display: none;
+        }
+        
+        .card-content {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        
+        .card-image {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        
+        .controls {
+            margin-top: 20px;
+        }
+        
+        button {
+            padding: 10px 20px;
+            font-size: 16px;
+            background-color: #3498db;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        
+        button:hover {
+            background-color: #2980b9;
+        }
+        
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            justify-content: center;
+            align-items: center;
+            z-index: 100;
+        }
+        
+        .modal-content {
+            background-color: white;
+            padding: 20px;
+            border-radius: 5px;
+            text-align: center;
+            max-width: 400px;
+        }
+        
+        .modal h2 {
+            margin-top: 0;
+            color: #333;
+        }
+        
+        .preview-message {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background-color: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 20px;
+            border-radius: 10px;
+            font-size: 24px;
+            z-index: 10;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <h1>Flip Card to Match</h1>
+    <div class="game-info">
+        <p>Number of steps: <span id="moves-left">12</span></p>
+        <p>Matched: <span id="matched-pairs">0</span>/6</p>
+        <p>Countdown: <span class="countdown" id="countdown">10</span>s</p>
+    </div>
+    <div class="game-board" id="game-board"></div>
+    <div class="controls">
+        <button id="restart-btn">Restart</button>
+    </div>
+    
+    <div class="preview-message" id="preview-message">Remember cards ...</div>
+    
+    <div class="modal" id="result-modal">
+        <div class="modal-content">
+            <h2 id="result-title">Game Result</h2>
+            <p id="result-message"></p>
+            <button id="play-again-btn">Play Again</button>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const gameBoard = document.getElementById('game-board');
+            const movesLeftDisplay = document.getElementById('moves-left');
+            const matchedPairsDisplay = document.getElementById('matched-pairs');
+            const countdownDisplay = document.getElementById('countdown');
+            const restartBtn = document.getElementById('restart-btn');
+            const resultModal = document.getElementById('result-modal');
+            const resultTitle = document.getElementById('result-title');
+            const resultMessage = document.getElementById('result-message');
+            const playAgainBtn = document.getElementById('play-again-btn');
+            const previewMessage = document.getElementById('preview-message');
+            
+            let cards = [];
+            let flippedCards = [];
+            let matchedPairs = 0;
+            let movesLeft = 12;
+            let canFlip = false;
+            let countdown = 10;
+            let countdownInterval;
+            
+            // 卡片数据 - 每组一对图片卡片
+            const cardPairs = [
+                {
+                    image1: 'image/UNBOUND.png', // 第一张图片
+                    image2: 'image/U.png' // 对应的匹配图片（替换为你想要的图片）
+                },
+                {
+                    image1: 'image/REFLECTIONS OF HOME.png',
+                    image2: 'image/R.png' // 对应的匹配图片
+                },
+                {
+                    image1: 'image/MIRAGE.png',
+                    image2: 'image/M.png' // 对应的匹配图片
+                },
+                {
+                    image1: 'image/ENTANGLED LABOURS.png',
+                    image2: 'image/E.png' // 对应的匹配图片
+                },
+                {
+                    image1: 'image/CHILDREN OF THE RESISTORS.png',
+                    image2: 'image/C.png' // 对应的匹配图片
+                },
+                {
+                    image1: 'image/xixi.png',
+                    image2: 'image/xixi.png' // 对应的匹配图片
+                }
+            ];
+            
+            // 初始化游戏
+            function initGame() {
+                // 重置游戏状态
+                gameBoard.innerHTML = '';
+                cards = [];
+                flippedCards = [];
+                matchedPairs = 0;
+                movesLeft = 12;
+                canFlip = false;
+                countdown = 10;
+                
+                // 清除之前的倒计时
+                if (countdownInterval) {
+                    clearInterval(countdownInterval);
+                }
+                
+                // 更新显示
+                movesLeftDisplay.textContent = movesLeft;
+                matchedPairsDisplay.textContent = matchedPairs;
+                countdownDisplay.textContent = countdown;
+                
+                // 显示预览消息
+                previewMessage.style.display = 'block';
+                
+                // 创建卡片对
+                const cardDeck = [];
+                cardPairs.forEach(pair => {
+                    // 创建第一张图片卡片
+                    cardDeck.push({
+                        type: 'image',
+                        value: pair.image1,
+                        pairId: pair.image1 // 使用图片路径作为配对ID
+                    });
+                    
+                    // 创建第二张图片卡片
+                    cardDeck.push({
+                        type: 'image',
+                        value: pair.image2,
+                        pairId: pair.image1 // 使用第一张图片路径作为配对ID
+                    });
+                });
+                
+                // 洗牌
+                const shuffledCards = [...cardDeck].sort(() => Math.random() - 0.5);
+                
+                // 创建卡片元素
+                shuffledCards.forEach((cardData, index) => {
+                    const card = document.createElement('div');
+                    card.className = 'card';
+                    card.dataset.index = index;
+                    card.dataset.pairId = cardData.pairId;
+                    
+                    const cardContent = document.createElement('div');
+                    cardContent.className = 'card-content';
+                    
+                    const img = document.createElement('img');
+                    img.className = 'card-image';
+                    img.src = cardData.value;
+                    img.alt = '卡片图片';
+                    cardContent.appendChild(img);
+                    
+                    card.appendChild(cardContent);
+                    card.addEventListener('click', flipCard);
+                    
+                    gameBoard.appendChild(card);
+                    cards.push(card);
+                    
+                    // 初始显示卡片正面
+                    card.classList.add('flipped');
+                });
+                
+                // 开始倒计时
+                countdownInterval = setInterval(() => {
+                    countdown--;
+                    countdownDisplay.textContent = countdown;
+                    
+                    if (countdown <= 0) {
+                        clearInterval(countdownInterval);
+                        endPreview();
+                    }
+                }, 1000);
+            }
+            
+            // 结束预览
+            function endPreview() {
+                previewMessage.style.display = 'none';
+                cards.forEach(card => {
+                    card.classList.remove('flipped');
+                });
+                canFlip = true; // 现在可以翻转卡片了
+            }
+            
+            // 翻转卡片
+            function flipCard() {
+                if (!canFlip || this.classList.contains('flipped') || this.classList.contains('matched')) {
+                    return;
+                }
+                
+                this.classList.add('flipped');
+                flippedCards.push(this);
+                
+                // 如果翻开了两张卡片，检查是否匹配
+                if (flippedCards.length === 2) {
+                    canFlip = false;
+                    movesLeft--;
+                    movesLeftDisplay.textContent = movesLeft;
+                    
+                    if (flippedCards[0].dataset.pairId === flippedCards[1].dataset.pairId) {
+                        // 匹配成功
+                        flippedCards[0].classList.add('matched');
+                        flippedCards[1].classList.add('matched');
+                        flippedCards = [];
+                        matchedPairs++;
+                        matchedPairsDisplay.textContent = matchedPairs;
+                        canFlip = true;
+                        
+                        // 检查是否获胜
+                        if (matchedPairs === 6) {
+                            setTimeout(() => {
+                                showResult(true);
+                            }, 500);
+                        }
+                    } else {
+                        // 不匹配，翻回去
+                        setTimeout(() => {
+                            flippedCards.forEach(card => {
+                                card.classList.remove('flipped');
+                            });
+                            flippedCards = [];
+                            canFlip = true;
+                            
+                            // 检查是否失败
+                            if (movesLeft === 0 && matchedPairs < 6) {
+                                showResult(false);
+                            }
+                        }, 1000);
+                    }
+                    
+                    // 检查步数是否用完
+                    if (movesLeft === 0 && matchedPairs < 6) {
+                        setTimeout(() => {
+                            showResult(false);
+                        }, 1000);
+                    }
+                }
+            }
+            
+            // 显示游戏结果
+            function showResult(isWin) {
+                resultTitle.textContent = isWin ? 'Congratulations!' : 'Game over';
+                resultMessage.textContent = isWin 
+                    ? `You have completed all matches in ${12 - movesLeft} steps!` 
+                    : `Unfortunately, you didn't complete all the matches.`;
+                resultModal.style.display = 'flex';
+            }
+            
+            // 重新开始游戏
+            restartBtn.addEventListener('click', initGame);
+            playAgainBtn.addEventListener('click', () => {
+                resultModal.style.display = 'none';
+                initGame();
+            });
+            
+            // 初始化游戏
+            initGame();
+        });
+    </script>
+</body>
+</html>
